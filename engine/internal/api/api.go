@@ -4,6 +4,7 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
@@ -45,6 +46,7 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /v1/health", s.health)
 	mux.HandleFunc("GET /v1/status", s.status)
+	mux.HandleFunc("GET /v1/metrics", s.metrics)
 	mux.HandleFunc("GET /v1/buckets", s.listBuckets)
 	mux.HandleFunc("PUT /v1/buckets/{bucket}", s.createBucket)
 	mux.HandleFunc("DELETE /v1/buckets/{bucket}", s.deleteBucket)
@@ -73,6 +75,8 @@ func (s *Server) secure(next http.Handler) http.Handler {
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("Cache-Control", "no-store")
 		h.Set("X-Frame-Options", "DENY")
+		h.Set("Referrer-Policy", "no-referrer")
+		h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
 		h.Set("Content-Security-Policy", "default-src 'none'")
 		if r.URL.Path != "/v1/health" && !s.authorized(r) {
 			writeErr(w, http.StatusUnauthorized, "missing or invalid bearer token")
@@ -84,7 +88,14 @@ func (s *Server) secure(next http.Handler) http.Handler {
 
 func (s *Server) authorized(r *http.Request) bool {
 	got, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
-	return ok && s.Token != "" && subtle.ConstantTimeCompare([]byte(got), []byte(s.Token)) == 1
+	if !ok || s.Token == "" {
+		return false
+	}
+	// Hash first so the compare is always 32 bytes (ConstantTimeCompare is
+	// not constant-time when the lengths differ).
+	sumGot := sha256.Sum256([]byte(got))
+	sumWant := sha256.Sum256([]byte(s.Token))
+	return subtle.ConstantTimeCompare(sumGot[:], sumWant[:]) == 1
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
@@ -110,6 +121,11 @@ func (s *Server) fail(w http.ResponseWriter, err error) {
 		code = http.StatusRequestEntityTooLarge
 	case errors.Is(err, node.ErrUnavailable):
 		code = http.StatusServiceUnavailable
+	default:
+		var max *http.MaxBytesError
+		if errors.As(err, &max) {
+			code = http.StatusRequestEntityTooLarge
+		}
 	}
 	if code == http.StatusInternalServerError && s.Log != nil {
 		s.Log.Error("request failed", "err", err)
@@ -147,6 +163,11 @@ func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 
 func (s *Server) status(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, s.Node.Status())
+}
+
+func (s *Server) metrics(w http.ResponseWriter, _ *http.Request) {
+	counters, latencies := s.Node.Metrics.Snapshot()
+	writeJSON(w, http.StatusOK, map[string]any{"counters": counters, "latencies": latencies})
 }
 
 type policyJSON struct {
@@ -250,6 +271,7 @@ func (s *Server) putObject(w http.ResponseWriter, r *http.Request) {
 	if ct == "" {
 		ct = "application/octet-stream"
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, s.Node.MaxObjectBytes())
 	m, err := s.Node.Put(r.Context(), bucket, key, r.Body, ct, metadataFrom(r.Header))
 	s.record(r, "object.put", bucket, key, err)
 	if err != nil {

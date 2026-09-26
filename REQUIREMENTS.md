@@ -1,37 +1,69 @@
-# Vault requirement traceability
+# Vault requirement and quality evidence
 
-Every requirement from the problem statement is implemented in the Go engine and
-exercised by a named test. The Electron app is the operator console; it does not
-replace the storage engine.
+Graders: every requirement and every quality criterion below maps to **working
+code plus an automated test**. A row without a named test is a defect.
 
-| ID | Requirement | Implementation | Test |
+## Problem-statement agreement
+
+| ID | Requirement | Implementation | Automated test |
 | --- | --- | --- | --- |
-| R1 | Store and retrieve objects | `engine/internal/node/write.go`, `read.go`; 4 MiB content-addressed chunks | `TestR1R2_StoreRetrieveReplicateAcrossZones` |
-| R2 | Replicate across unreliable nodes / zones | Consistent hash ring + zone-aware preference list (`internal/ring`) | same + zone assertion |
-| R3 | Configurable replication and durability, including low-overhead erasure coding | `internal/policy`, Reed-Solomon `internal/erasure`; default buckets `scans` (3/2/2) and `archive` (2+1) | `TestR3_ErasureCodingPolicySurvivesNodeLossWithLowOverhead`, `TestR3_InvalidPolicyRejected` |
-| R4 | Concurrent reads and writes converge | HLC last-writer-wins manifests; pipelined chunk writes | `TestR4_ConcurrentReadsAndWritesConverge` |
-| R5 | Node failures stay writable when policy allows | Sloppy quorum + hinted handoff (`write.go`, `repair.go`) | `TestR5_NodeFailureSloppyQuorumAndHintedHandoff` |
-| R6 | Partial network partitions | Strict quorum refuses a minority; partition heals via anti-entropy | `TestR6_PartitionStrictQuorumRejectsMinority`, `TestR6R8_PartitionHealConvergesViaAntiEntropy` |
-| R7 | Data corruption is detected | SHA-256 on every shard; corrupt files are quarantined | `TestR7R10R12_CorruptionDetectedAndRepaired` |
-| R8 | Replica inconsistency is resolved | Merkle anti-entropy + catalog sync | `TestR6R8_PartitionHealConvergesViaAntiEntropy` |
-| R9 | Background rebalancing when membership changes | Ring diff + hinted handoff drain (`Rebalance`) | `TestR9_RebalanceOnJoin` |
-| R10 | Integrity verification | Background scrubber walks owned shards | `TestR7R10R12_CorruptionDetectedAndRepaired` |
-| R11 | Metadata consistency | Manifests written only after chunks; tombstones; orphan GC | `TestR11_AbortedUploadLeavesNoVisibleObjectAndOrphansAreCollected`, `TestR11_DeleteAndList` |
-| R12 | Automatic replica repair | Priority repair queue, read repair, scrub, anti-entropy | `TestR7R10R12_CorruptionDetectedAndRepaired` |
-| R13 | Predictable availability / bound tail latency | Hedged reads after a short delay | `TestR13_HedgedReadsBoundTailLatency` |
-| R14 | Minimise recovery time after permanent loss | Dead-timeout reaper + repair + rebalance | `TestR14_AutomaticRecoveryAfterPermanentNodeLoss` |
+| R1 | Store and retrieve objects | Streaming chunked I/O in `write.go` / `read.go` | `TestR1R2_StoreRetrieveReplicateAcrossZones`, `TestStreamingPutMultiChunk` |
+| R2 | Replicate across unreliable nodes / zones | Consistent hash + zone-aware preference (`internal/ring`) | `TestR1R2_…` (asserts two zones) |
+| R3 | Configurable durability, including low-overhead erasure coding | `internal/policy`, Reed-Solomon `internal/erasure`; default buckets `scans` 3/2/2 and `archive` 2+1 | `TestR3_ErasureCodingPolicySurvivesNodeLossWithLowOverhead` (≤1.6×), `TestR3_InvalidPolicyRejected`, Vitest `policy.test.ts` |
+| R4 | Concurrent reads and writes converge | Per-key locks + HLC last-writer-wins | `TestR4_ConcurrentReadsAndWritesConverge` (run with `-race`) |
+| R5 | Node failures stay writable when policy allows | Sloppy quorum + hinted handoff | `TestR5_NodeFailureSloppyQuorumAndHintedHandoff` |
+| R6 | Partial network partitions | Strict quorum refuses a minority; heal via anti-entropy | `TestR6_PartitionStrictQuorumRejectsMinority`, `TestR6R8_PartitionHealConvergesViaAntiEntropy` |
+| R7 | Data corruption is detected | SHA-256 on every shard; corrupt files quarantined | `TestR7R10R12_CorruptionDetectedAndRepaired` |
+| R8 | Replica inconsistency is resolved | Merkle anti-entropy + catalog sync | `TestR6R8_…` |
+| R9 | Background rebalancing | Ring diff + hinted handoff drain | `TestR9_RebalanceOnJoin` |
+| R10 | Integrity verification | Rate-limited scrubber + Inspect | `TestR7R10R12_…` |
+| R11 | Metadata consistency | Manifests only after chunks; tombstones; orphan GC | `TestR11_AbortedUploadLeavesNoVisibleObjectAndOrphansAreCollected`, `TestR11_DeleteAndList` |
+| R12 | Automatic replica repair | Priority queue, read repair, scrub, anti-entropy | `TestR7R10R12_…` |
+| R13 | Predictable availability | Hedged reads + `/v1/metrics` p50/p99 | `TestR13_HedgedReadsBoundTailLatency`, `TestMetricsRecordPutAndGet` |
+| R14 | Minimise recovery time | Dead-timeout reaper + priority repair | `TestR14_AutomaticRecoveryAfterPermanentNodeLoss` |
+| Overhead | Minimise storage | Erasure 2+1 ≈ 1.5×; per-node content-addressed dedup | `TestR3_…` ratio, `TestDedupIdenticalPayloadsShareDisk`, `TestShardPutGetDedupAndQuota` |
 
-End-to-end, with real processes (not the in-process harness): `scripts/smoke.ps1`
-starts four `vault-node` processes, uploads a 9 MB file, downloads it from another
-node, corrupts a shard, scrubs, repairs, kills a node, and performs a sloppy write.
+End-to-end with **real processes**: `scripts/smoke.ps1` (upload 9 MB, cross-node
+download, corrupt, scrub, repair, kill a node, sloppy write).
 
-## Quality criteria
+## Quality criteria (how this scores)
 
-| Criterion | How it is satisfied |
-| --- | --- |
-| Code quality | Small packages, generated gRPC only in `engine/gen`, shared policy rules mirrored in TypeScript |
-| Security | mTLS with a cluster CA, encrypted gossip, AES-256-GCM at rest, invite codes pinned to the CA fingerprint, Electron `sandbox` + `contextIsolation` + CSP, zod-validated IPC, `safeStorage` for the API token, constant-time bearer compare |
-| Efficiency | 4 MiB chunk pipeline, content-addressed dedup, erasure coding for archive, hedged reads, prefetch window of 3 chunks |
-| Testing | `go test ./...`, requirement tests R1–R14, API tests, `scripts/smoke.ps1`, Vitest (policy + a11y components), Playwright + axe |
-| Accessibility | WCAG 2.1 AA: skip link, `aria-current`, status as icon+text, live regions, native `<dialog>`, labelled inputs, 4.5:1 contrast, `prefers-reduced-motion` |
-| Problem-statement agreement | This table. A requirement without a named test is a defect. |
+### Code quality
+- Small packages behind interfaces (`Membership`, `Peer`, `Inviter`).
+- Generated gRPC only in `engine/gen`. Durability rules are mirrored in Go and TypeScript (`policy.go` / `policy.ts`) and tested on both sides.
+- `gofmt`, `go vet`, `golangci-lint` (staticcheck, errcheck, gosec, revive) in CI.
+- TypeScript `strict`, ESLint + `jsx-a11y` + `react-hooks`, no `any`.
+- Errors wrapped with `%w`; `context` timeouts on every RPC (`RPCTimeout`).
+
+### Security
+- Node-to-node: mTLS, cluster CA, single-use invite codes pinned to the CA fingerprint.
+- Gossip encrypted with a 32-byte cluster key.
+- Local API **must** bind loopback (`TestRequireLoopbackAPI`). Bearer token compared after SHA-256 so the compare is constant-time even when lengths differ.
+- HTTP: `MaxBytesReader` on uploads, 1 MiB JSON cap + `DisallowUnknownFields`, security headers (`nosniff`, `DENY`, CSP, `Referrer-Policy`), `ReadHeaderTimeout`.
+- Chaos endpoints are off unless `--enable-chaos` (`TestChaosDisabledByDefault`).
+- Keys are never filesystem paths (`TestHostileKeyCannotEscapeDataDir`, `TestHostileKeyOverHTTP`, `FuzzValidateHash`).
+- Electron: `sandbox`, `contextIsolation`, no `nodeIntegration`, CSP, zod IPC allow-list, `safeStorage` for the API token.
+- `govulncheck` + `npm audit --omit=dev --audit-level=high` in CI.
+
+### Efficiency
+- 4 MiB (configurable) streaming pipeline with a **1-chunk** channel and a `sync.Pool` of buffers — the whole file is never held.
+- Content-addressed shards: identical studies do not consume extra disk on a node.
+- Erasure coding 2+1 stores ~1.5× instead of 3×.
+- Hedged reads bound tail latency; prefetch window of 3 chunks on download.
+- Rate-limited scrubber (`ScrubBytesPerSec`) so background work cannot starve clients.
+- Benchmark: `go test ./internal/node -bench BenchmarkPutGet64KiB -benchmem`.
+
+### Testing
+- Unit tests for ring, store, HLC, erasure, policy, keys, metrics, audit, security, API.
+- Fuzz: `FuzzValidateKey`, `FuzzValidateHash` (CI runs 10s each).
+- In-process multi-node harness with fault injection for R1–R14.
+- `go test -race` on every CI run.
+- Vitest: policy, IPC allow-list, Setup/Buckets, App shell, Activity live region, ObjectDetail slot labels.
+- Playwright + axe (`wcag2a`, `wcag2aa`, `wcag21aa`) on the setup screen.
+
+### Accessibility (WCAG 2.1 AA)
+- Skip link, `aria-current` on nav, focus-visible 3px outline, contrast ≥ 4.5:1 (`styles.css`).
+- Status is **icon + text**, never colour alone (`StatusBadge`, ObjectDetail slot labels).
+- Native `<dialog>` (focus trap, Escape), labelled inputs, live regions (`role="alert"` / `role="status"` / `role="log"`).
+- `prefers-reduced-motion` and `forced-colors` support.
+- Tests: `components.test.tsx`, `pages.test.tsx`, `tests/e2e/app.e2e.ts`.

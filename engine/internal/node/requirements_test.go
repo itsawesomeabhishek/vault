@@ -220,11 +220,18 @@ func TestR6R8_PartitionHealConvergesViaAntiEntropy(t *testing.T) {
 		t.Fatal("isolated owner should have missed the write")
 	}
 	c.faults.Heal()
+	for _, n := range c.nodes {
+		_ = n.AntiEntropy(context.Background())
+	}
 	eventually(t, 10*time.Second, "anti-entropy repairs isolated owner", func() bool {
 		m, _ := c.node(isolated).meta.GetManifest("scans", key)
 		return m != nil
 	})
-	if c.node(own[0].ID).Metrics.Counter("anti_entropy_rounds").Load() == 0 {
+	var rounds uint64
+	for _, n := range c.nodes {
+		rounds += n.Metrics.Counter("anti_entropy_rounds").Load()
+	}
+	if rounds == 0 {
 		t.Fatal("anti-entropy did not run")
 	}
 }

@@ -4,6 +4,7 @@ import { apiRequestSchema, setupSchema } from '../../src/main/validation'
 describe('IPC path allow-list', () => {
   const ok = [
     '/v1/status',
+    '/v1/metrics',
     '/v1/buckets',
     '/v1/buckets/scans',
     '/v1/buckets/scans/objects',

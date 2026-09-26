@@ -23,10 +23,12 @@ export function Scans({ onInspect }: { onInspect: (bucket: string, key: string) 
     const q = search.trim() ? `?patient=${encodeURIComponent(search.trim())}` : ''
     return `/v1/buckets/${bucket}/objects${q}`
   }, [bucket, search])
-  const { data: listing, error, refresh } = usePoll<{ items: ObjectSummary[] }>(buckets?.some((b) => b.name === bucket) ? listPath : null, 3000)
+  const bucketList = Array.isArray(buckets) ? buckets : []
+  const { data: listing, error, refresh } = usePoll<{ items: ObjectSummary[] }>(bucketList.some((b) => b.name === bucket) ? listPath : null, 3000)
 
   useEffect(() => {
-    if (buckets && buckets.length > 0 && !buckets.some((b) => b.name === bucket)) setBucket(buckets[0]!.name)
+    if (!Array.isArray(buckets) || buckets.length === 0) return
+    if (!buckets.some((b) => b.name === bucket)) setBucket(buckets[0]!.name)
   }, [buckets, bucket])
 
   useEffect(

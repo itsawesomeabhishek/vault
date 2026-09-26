@@ -77,7 +77,23 @@ func countOK(ts []target) int {
 
 type chunkData struct {
 	data []byte
+	buf  []byte
 	err  error
+}
+
+var chunkPool = sync.Pool{New: func() any { return make([]byte, 4<<20) }}
+
+func allocChunk(size int) []byte {
+	if size == 4<<20 {
+		return chunkPool.Get().([]byte)
+	}
+	return make([]byte, size)
+}
+
+func recycleChunk(buf []byte) {
+	if buf != nil && cap(buf) == 4<<20 {
+		chunkPool.Put(buf[:4<<20])
+	}
 }
 
 // Put stores an object read from r and returns its manifest once W slots
@@ -125,6 +141,7 @@ func (n *Node) Put(ctx context.Context, bucket, key string, r io.Reader, content
 		}
 		whole.Write(c.data)
 		chunk, err := n.writeChunk(ctx, p, targets, c.data)
+		recycleChunk(c.buf)
 		if err != nil {
 			return nil, err
 		}
@@ -146,11 +163,11 @@ func (n *Node) Put(ctx context.Context, bucket, key string, r io.Reader, content
 func (n *Node) readChunks(ctx context.Context, r io.Reader, out chan<- chunkData) {
 	defer close(out)
 	for {
-		buf := make([]byte, n.cfg.ChunkSize)
+		buf := allocChunk(n.cfg.ChunkSize)
 		k, err := io.ReadFull(r, buf)
 		if k > 0 {
 			select {
-			case out <- chunkData{data: buf[:k]}:
+			case out <- chunkData{data: buf[:k], buf: buf}:
 			case <-ctx.Done():
 				return
 			}

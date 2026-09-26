@@ -1,0 +1,27 @@
+run:
+  timeout: 5m
+  tests: true
+
+issues:
+  exclude-dirs:
+    - gen
+
+linters:
+  disable-all: true
+  enable:
+    - errcheck
+    - gosec
+    - govet
+    - ineffassign
+    - revive
+    - staticcheck
+    - unused
+
+linters-settings:
+  gosec:
+    excludes:
+      - G104
+  revive:
+    rules:
+      - name: exported
+        disabled: true

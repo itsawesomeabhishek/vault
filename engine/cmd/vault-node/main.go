@@ -61,7 +61,7 @@ func parseFlags() options {
 	flag.StringVar(&o.advertise, "advertise", "", "IP other nodes use to reach this node (default: auto-detect, Tailscale preferred)")
 	flag.IntVar(&o.rpcPort, "rpc-port", 19000, "gRPC port (mutual TLS)")
 	flag.IntVar(&o.gossipPort, "gossip-port", 17946, "gossip port (TCP+UDP, encrypted)")
-	flag.StringVar(&o.apiAddr, "api-addr", "127.0.0.1:18080", "local HTTP API address")
+	flag.StringVar(&o.apiAddr, "api-addr", "127.0.0.1:18080", "loopback HTTP API address")
 	flag.BoolVar(&o.init, "init", false, "create a new cluster")
 	flag.StringVar(&o.join, "join", "", "invite code of an existing cluster")
 	flag.IntVar(&o.chunkMiB, "chunk-mib", 4, "chunk size in MiB")
@@ -103,6 +103,9 @@ func run(o options, log *slog.Logger) error {
 	token := os.Getenv("VAULT_API_TOKEN")
 	if len(token) < 16 {
 		return errors.New("VAULT_API_TOKEN must be set to a random string of at least 16 characters")
+	}
+	if err := requireLoopbackAPI(o.apiAddr); err != nil {
+		return err
 	}
 	if err := os.MkdirAll(o.dataDir, 0o700); err != nil {
 		return err
@@ -227,6 +230,7 @@ func run(o options, log *slog.Logger) error {
 		Handler:           (&api.Server{Node: n, Token: token, Audit: al, Inviter: inviter, Chaos: o.chaos, Log: log}).Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       2 * time.Minute,
+		MaxHeaderBytes:    1 << 16,
 	}
 	apiLis, err := net.Listen("tcp", o.apiAddr)
 	if err != nil {
@@ -361,4 +365,19 @@ func detectIP() string {
 		return lan
 	}
 	return "127.0.0.1"
+}
+
+func requireLoopbackAPI(addr string) error {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return fmt.Errorf("api-addr: %w", err)
+	}
+	if host == "localhost" {
+		return nil
+	}
+	ip := net.ParseIP(host)
+	if ip != nil && ip.IsLoopback() {
+		return nil
+	}
+	return fmt.Errorf("api-addr must be loopback (127.0.0.1 or localhost), got %s — the desktop app talks to the node on this computer only", addr)
 }

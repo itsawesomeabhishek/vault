@@ -16,8 +16,21 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: engine/go.mod
+      - name: Format
+        run: test -z "$(gofmt -l .)"
       - run: go vet ./...
-      - run: go test ./... -count=1 -timeout 10m -race
+      - uses: golangci/golangci-lint-action@v6
+        with:
+          working-directory: engine
+          args: --timeout=5m
+      - name: Tests with race detector
+        run: go test ./... -count=1 -timeout 10m -race
+      - name: Coverage
+        run: go test ./... -count=1 -timeout 10m -covermode=atomic -coverprofile=coverage.out
+      - name: Fuzz key and hash validation
+        run: |
+          go test ./internal/keys -fuzz=FuzzValidateKey -fuzztime=10s
+          go test ./internal/keys -fuzz=FuzzValidateHash -fuzztime=10s
       - run: go install golang.org/x/vuln/cmd/govulncheck@latest
       - run: govulncheck ./...
 
@@ -37,6 +50,7 @@ jobs:
           cache: npm
           cache-dependency-path: app/package-lock.json
       - run: npm ci --no-audit --no-fund
+      - run: npm audit --omit=dev --audit-level=high
       - run: npm run typecheck
       - run: npm test
       - run: npm run lint

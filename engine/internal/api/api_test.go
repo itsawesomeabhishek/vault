@@ -115,3 +115,32 @@ func TestRejectsUnknownFields(t *testing.T) {
 		t.Fatalf("unknown field = %d", r.StatusCode)
 	}
 }
+
+func TestMetricsAndSecurityHeaders(t *testing.T) {
+	srv := newServer(t)
+	if r, _ := do(t, "GET", srv.URL+"/v1/metrics", "wrong-length", "", nil); r.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("wrong token length = %d", r.StatusCode)
+	}
+	r, b := do(t, "GET", srv.URL+"/v1/metrics", "secret", "", nil)
+	if r.StatusCode != http.StatusOK || !strings.Contains(b, `"counters"`) {
+		t.Fatalf("metrics = %d %s", r.StatusCode, b)
+	}
+	if r.Header.Get("X-Content-Type-Options") != "nosniff" || r.Header.Get("Referrer-Policy") != "no-referrer" {
+		t.Fatalf("missing security headers: %v", r.Header)
+	}
+}
+
+func TestHostileKeyOverHTTP(t *testing.T) {
+	srv := newServer(t)
+	tok := "secret"
+	if r, b := do(t, "PUT", srv.URL+"/v1/buckets/scans", tok, `{"policy":{"n":1,"k":1,"w":1,"r":1}}`, nil); r.StatusCode != http.StatusCreated {
+		t.Fatalf("bucket = %d %s", r.StatusCode, b)
+	}
+	key := "..%2F..%2Fwindows%2Fsystem32%2Fevil.dcm"
+	if r, b := do(t, "PUT", srv.URL+"/v1/buckets/scans/objects/"+key, tok, "bytes", nil); r.StatusCode != http.StatusCreated {
+		t.Fatalf("put hostile key = %d %s", r.StatusCode, b)
+	}
+	if r, b := do(t, "GET", srv.URL+"/v1/buckets/scans/objects/"+key, tok, "", nil); r.StatusCode != http.StatusOK || b != "bytes" {
+		t.Fatalf("get hostile key = %d %q", r.StatusCode, b)
+	}
+}

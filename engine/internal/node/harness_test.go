@@ -18,7 +18,7 @@ import (
 // testCluster runs several nodes in one process over an in-memory network
 // with fault injection. Membership is controlled explicitly by the test.
 type testCluster struct {
-	t       *testing.T
+	t       testing.TB
 	members *membership.Static
 	net     *transport.LocalNetwork
 	faults  *transport.Faults
@@ -28,7 +28,7 @@ type testCluster struct {
 	tweak   func(*Config)
 }
 
-func newTestCluster(t *testing.T, count int, tweak func(*Config)) *testCluster {
+func newTestCluster(t testing.TB, count int, tweak func(*Config)) *testCluster {
 	t.Helper()
 	c := &testCluster{
 		t: t, members: membership.NewStatic(), net: transport.NewLocalNetwork(), faults: transport.NewFaults(),
@@ -105,7 +105,7 @@ func (c *testCluster) createBucket(name string, p *vaultpb.Policy) {
 	}
 }
 
-func randomBytes(t *testing.T, n int) []byte {
+func randomBytes(t testing.TB, n int) []byte {
 	t.Helper()
 	b := make([]byte, n)
 	if _, err := rand.Read(b); err != nil {
@@ -114,7 +114,7 @@ func randomBytes(t *testing.T, n int) []byte {
 	return b
 }
 
-func mustPut(t *testing.T, n *Node, bucket, key string, data []byte) *vaultpb.Manifest {
+func mustPut(t testing.TB, n *Node, bucket, key string, data []byte) *vaultpb.Manifest {
 	t.Helper()
 	m, err := n.Put(context.Background(), bucket, key, bytes.NewReader(data), "application/octet-stream", nil)
 	if err != nil {
@@ -123,7 +123,7 @@ func mustPut(t *testing.T, n *Node, bucket, key string, data []byte) *vaultpb.Ma
 	return m
 }
 
-func mustGet(t *testing.T, n *Node, bucket, key string) []byte {
+func mustGet(t testing.TB, n *Node, bucket, key string) []byte {
 	t.Helper()
 	_, rc, err := n.Get(context.Background(), bucket, key)
 	if err != nil {
@@ -137,7 +137,7 @@ func mustGet(t *testing.T, n *Node, bucket, key string) []byte {
 	return data
 }
 
-func eventually(t *testing.T, timeout time.Duration, what string, cond func() bool) {
+func eventually(t testing.TB, timeout time.Duration, what string, cond func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {

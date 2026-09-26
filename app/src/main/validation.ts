@@ -6,7 +6,7 @@ import { z } from 'zod'
  * choose arbitrary files except through OS dialogs or drag-and-drop.
  */
 
-const API_PATH = /^\/v1\/(status|buckets(\/[a-z0-9-]{3,63}(\/(objects|inspect|repair)(\/[^?#]*)?)?)?(\?[\w=&%.\-~+]*)?|maintenance\/(scrub|anti-entropy)|audit(\?limit=\d{1,3})?|invites|chaos\/(corrupt|drop|partition|heal))$/
+const API_PATH = /^\/v1\/(status|metrics|buckets(\/[a-z0-9-]{3,63}(\/(objects|inspect|repair)(\/[^?#]*)?)?)?(\?[\w=&%.\-~+]*)?|maintenance\/(scrub|anti-entropy)|audit(\?limit=\d{1,3})?|invites|chaos\/(corrupt|drop|partition|heal))$/
 
 export const apiRequestSchema = z.object({
   node: z.number().int().min(0).max(1).optional(),

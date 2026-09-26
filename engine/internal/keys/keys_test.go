@@ -64,3 +64,13 @@ func FuzzValidateKey(f *testing.F) {
 		}
 	})
 }
+
+func FuzzValidateHash(f *testing.F) {
+	f.Add(HashHex([]byte("scan")))
+	f.Add("../etc/passwd")
+	f.Fuzz(func(t *testing.T, h string) {
+		if ValidateHash(h) == nil && (len(h) != 64 || strings.ContainsAny(h, "/.\\")) {
+			t.Fatalf("accepted unsafe hash %q", h)
+		}
+	})
+}

@@ -253,6 +253,9 @@ func (n *Node) rpcCtx(ctx context.Context) (context.Context, context.CancelFunc)
 	return context.WithTimeout(ctx, n.cfg.RPCTimeout)
 }
 
+// MaxObjectBytes is the largest upload this node will accept.
+func (n *Node) MaxObjectBytes() int64 { return n.cfg.MaxObjectBytes }
+
 func (n *Node) peer(m membership.Member) (transport.Peer, error) {
 	if m.ID == n.cfg.ID {
 		return n.selfPeer(), nil
