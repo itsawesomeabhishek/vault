@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["vitest/globals", "@testing-library/jest-dom"],
+    "composite": true
+  },
+  "include": ["src/renderer/**/*", "src/shared/**/*", "src/preload/api.d.ts", "tests/unit/**/*"],
+  "exclude": ["tests/unit/validation.test.ts"]
+}

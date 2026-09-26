@@ -1,0 +1,16 @@
+.env
+.env.*
+.tools/
+app/node_modules/
+app/out/
+app/dist/
+app/resources/bin/
+app/*.tsbuildinfo
+**/*.exe
+**/*.test
+engine/coverage.out
+.DS_Store
+Thumbs.db
+*.log
+.idea/
+.vscode/

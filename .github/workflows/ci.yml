@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  engine:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: engine
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: engine/go.mod
+      - run: go vet ./...
+      - run: go test ./... -count=1 -timeout 10m -race
+      - run: go install golang.org/x/vuln/cmd/govulncheck@latest
+      - run: govulncheck ./...
+
+  app:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: engine/go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run lint
+      - name: Build node binary
+        working-directory: engine
+        run: |
+          New-Item -ItemType Directory -Force -Path ../app/resources/bin | Out-Null
+          $env:CGO_ENABLED = '0'
+          go build -trimpath -ldflags '-s -w' -o ../app/resources/bin/vault-node.exe ./cmd/vault-node
+      - run: npm run build
+      - run: npx electron-builder --win --x64 --publish never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Vault-Setup
+          path: app/dist/Vault-Setup.exe

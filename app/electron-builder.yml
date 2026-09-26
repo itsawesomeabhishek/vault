@@ -1,0 +1,35 @@
+appId: com.hydrasoftware.vault
+productName: Vault
+copyright: Copyright © Hydra Software
+directories:
+  output: dist
+  buildResources: build
+files:
+  - out/**/*
+  - package.json
+extraResources:
+  - from: resources/bin
+    to: bin
+    filter:
+      - vault-node.exe
+asar: true
+forceCodeSigning: false
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  artifactName: Vault-Setup.${ext}
+  requestedExecutionLevel: asInvoker
+nsis:
+  oneClick: false
+  perMachine: true
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Vault
+  include: build/installer.nsh
+  installerLanguages:
+    - en_US
+  license: ../LICENSE
+  deleteAppDataOnUninstall: false

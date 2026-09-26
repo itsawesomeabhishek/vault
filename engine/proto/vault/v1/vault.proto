@@ -1,0 +1,166 @@
+syntax = "proto3";
+
+package vault.v1;
+
+option go_package = "github.com/hydra-software/vault/engine/gen/vaultpb;vaultpb";
+
+// Node is the internal node-to-node API. Every method except Join requires a
+// client certificate signed by the cluster CA (mutual TLS).
+service Node {
+  rpc Ping(PingRequest) returns (PingResponse);
+  rpc PutShard(PutShardRequest) returns (PutShardResponse);
+  rpc GetShard(GetShardRequest) returns (GetShardResponse);
+  rpc HasShards(HasShardsRequest) returns (HasShardsResponse);
+  rpc PutManifest(PutManifestRequest) returns (PutManifestResponse);
+  rpc GetManifest(GetManifestRequest) returns (GetManifestResponse);
+  rpc ListManifests(ListManifestsRequest) returns (ListManifestsResponse);
+  rpc MerkleTree(MerkleTreeRequest) returns (MerkleTreeResponse);
+  rpc LeafEntries(LeafEntriesRequest) returns (LeafEntriesResponse);
+  rpc SyncCatalog(SyncCatalogRequest) returns (SyncCatalogResponse);
+  rpc Join(JoinRequest) returns (JoinResponse);
+}
+
+// Version is a hybrid logical clock timestamp. Ties are broken by node ID so
+// that every replica picks the same winner (last-writer-wins).
+message Version {
+  int64 wall = 1;
+  uint32 logical = 2;
+  string node = 3;
+}
+
+// Policy is the durability policy of a bucket.
+// k == 1 means full replication with n copies; k > 1 means Reed-Solomon
+// erasure coding with k data shards and n-k parity shards.
+message Policy {
+  uint32 n = 1;
+  uint32 k = 2;
+  uint32 w = 3;
+  uint32 r = 4;
+  bool sloppy = 5;
+}
+
+message Chunk {
+  string hash = 1;             // SHA-256 of the plaintext chunk
+  uint64 size = 2;
+  repeated string shards = 3;  // per-slot shard hashes; empty when k == 1
+}
+
+message Manifest {
+  string bucket = 1;
+  string key = 2;
+  Version version = 3;
+  bool deleted = 4;
+  uint64 size = 5;
+  string content_type = 6;
+  map<string, string> metadata = 7;
+  Policy policy = 8;
+  repeated Chunk chunks = 9;
+  string etag = 10;            // SHA-256 of the whole object
+  int64 created_unix_nano = 11;
+}
+
+message BucketConfig {
+  string name = 1;
+  Policy policy = 2;
+  Version version = 3;
+  bool deleted = 4;
+  int64 created_unix_nano = 5;
+}
+
+message Catalog {
+  repeated BucketConfig buckets = 1;
+}
+
+message KeyVersion {
+  string bucket = 1;
+  string key = 2;
+  Version version = 3;
+}
+
+message PingRequest {}
+message PingResponse {
+  string node_id = 1;
+}
+
+message PutShardRequest {
+  string hash = 1;
+  bytes data = 2;
+}
+message PutShardResponse {}
+
+message GetShardRequest {
+  string hash = 1;
+}
+message GetShardResponse {
+  bytes data = 1;
+}
+
+message HasShardsRequest {
+  repeated string hashes = 1;
+  bool verify = 2;             // re-hash the data instead of checking existence only
+}
+message HasShardsResponse {
+  repeated bool present = 1;
+}
+
+message PutManifestRequest {
+  Manifest manifest = 1;
+  string hint_for = 2;         // set when this node is a stand-in for an unavailable owner
+}
+message PutManifestResponse {
+  bool applied = 1;
+}
+
+message GetManifestRequest {
+  string bucket = 1;
+  string key = 2;
+}
+message GetManifestResponse {
+  Manifest manifest = 1;       // unset when the key is unknown
+}
+
+message ListManifestsRequest {
+  string bucket = 1;
+  string prefix = 2;
+  string start_after = 3;
+  uint32 limit = 4;
+}
+message ListManifestsResponse {
+  repeated Manifest manifests = 1;
+}
+
+message MerkleTreeRequest {
+  string peer = 1;             // compute over keys owned by both the callee and this peer
+}
+message MerkleTreeResponse {
+  repeated bytes leaves = 1;
+}
+
+message LeafEntriesRequest {
+  string peer = 1;
+  uint32 leaf = 2;
+}
+message LeafEntriesResponse {
+  repeated KeyVersion entries = 1;
+}
+
+message SyncCatalogRequest {
+  Catalog catalog = 1;
+}
+message SyncCatalogResponse {
+  Catalog catalog = 1;
+}
+
+message JoinRequest {
+  string token = 1;
+  string node_id = 2;
+}
+message JoinResponse {
+  string cluster_id = 1;
+  bytes ca_cert_pem = 2;
+  bytes ca_key_pem = 3;
+  bytes gossip_key = 4;
+  bytes data_key = 5;
+  repeated string gossip_seeds = 6;
+  Catalog catalog = 7;
+}
