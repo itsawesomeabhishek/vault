@@ -1,3 +1,5 @@
+// Quorum object reads: R manifests, hedged shard fetches, a 3-chunk prefetch
+// window, and async read-repair of stale or corrupt copies.
 package node
 
 import (

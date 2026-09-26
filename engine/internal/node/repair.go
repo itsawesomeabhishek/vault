@@ -1,3 +1,5 @@
+// Background maintenance: priority repair, integrity scrub, Merkle
+// anti-entropy, rebalance after ring changes, and hinted handoff.
 package node
 
 import (

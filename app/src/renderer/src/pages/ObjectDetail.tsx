@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Inspection, SlotStatus } from '../../../shared/types'
 import { formatBytes } from '../../../shared/policy'
 import { Card, StatusBadge, useNotify, type Health } from '../components'
@@ -17,21 +17,20 @@ export function ObjectDetail(props: { bucket: string; objectKey: string; demoMod
   const [error, setError] = useState<string | null>(null)
   const heading = useRef<HTMLHeadingElement>(null)
 
-  const load = async (): Promise<void> => {
+  const load = useCallback(async (): Promise<void> => {
     const res = await api<Inspection>('GET', inspectPath(props.bucket, props.objectKey))
     if (res.ok) {
       setIns(res.data)
       setError(null)
     } else setError(res.error)
-  }
+  }, [props.bucket, props.objectKey])
 
   useEffect(() => {
     heading.current?.focus()
     void load()
     const t = setInterval(() => void load(), 2000)
     return () => clearInterval(t)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.bucket, props.objectKey])
+  }, [load])
 
   const chaos = async (kind: 'corrupt' | 'drop', node: number): Promise<void> => {
     const res = await api('POST', `/v1/chaos/${kind}`, { bucket: props.bucket, key: props.objectKey }, node)

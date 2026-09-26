@@ -29,11 +29,12 @@ download, corrupt, scrub, repair, kill a node, sloppy write).
 ## Quality criteria (how this scores)
 
 ### Code quality
-- Small packages behind interfaces (`Membership`, `Peer`, `Inviter`).
+- Small packages behind interfaces (`Membership`, `Peer`, `Inviter`). Every
+  production package except generated `vaultpb` has its own `_test.go`.
 - Generated gRPC only in `engine/gen`. Durability rules are mirrored in Go and TypeScript (`policy.go` / `policy.ts`) and tested on both sides.
-- `gofmt`, `go vet`, `golangci-lint` (staticcheck, errcheck, gosec, revive) in CI.
-- TypeScript `strict`, ESLint + `jsx-a11y` + `react-hooks`, no `any`.
-- Errors wrapped with `%w`; `context` timeouts on every RPC (`RPCTimeout`).
+- `gofmt`, `go vet`, `golangci-lint` (staticcheck, errcheck, gosec, revive) in CI. Root `Makefile` and `.editorconfig` keep style consistent.
+- TypeScript `strict` + `noUnusedLocals` / `noUnusedParameters`, ESLint + `jsx-a11y` + `react-hooks`, no `any`, no `eslint-disable`.
+- Errors wrapped with `%w`; `context` timeouts on every RPC (`RPCTimeout`). Typed API JSON (`healthResponse`, `metricsResponse`).
 
 ### Security
 - Node-to-node: mTLS, cluster CA, single-use invite codes pinned to the CA fingerprint.

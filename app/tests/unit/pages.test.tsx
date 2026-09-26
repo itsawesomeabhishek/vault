@@ -6,7 +6,7 @@ import { App } from '../../src/renderer/src/App'
 import { Activity } from '../../src/renderer/src/pages/Activity'
 import { ObjectDetail } from '../../src/renderer/src/pages/ObjectDetail'
 import { installBridge } from './setup'
-import type { AppState, Inspection, NodeStatus, VaultEvent } from '../../src/shared/types'
+import type { ApiRequest, AppState, Inspection, NodeStatus, VaultEvent } from '../../src/shared/types'
 
 const ready: AppState = {
   setupComplete: true,
@@ -42,10 +42,9 @@ describe('shell accessibility', () => {
   it('exposes a skip link, current page, and text-not-colour status', async () => {
     installBridge({
       state: async () => ready,
-      api: async (req) => {
-        if (req.path === '/v1/status') return { ok: true, status: 200, data: status, error: null }
-        if (req.path === '/v1/buckets') return { ok: true, status: 200, data: [], error: null }
-        return { ok: true, status: 200, data: { items: [] }, error: null }
+      api: async <T,>(req: ApiRequest) => {
+        const data = req.path === '/v1/status' ? status : req.path === '/v1/buckets' ? [] : { items: [] }
+        return { ok: true, status: 200, data: data as T, error: null }
       }
     })
     render(
@@ -102,7 +101,7 @@ describe('object detail replica table', () => {
       ]
     }
     installBridge({
-      api: async () => ({ ok: true, status: 200, data: ins, error: null })
+      api: async <T,>() => ({ ok: true, status: 200, data: ins as T, error: null })
     })
     render(
       <NoticeProvider>

@@ -19,6 +19,7 @@ import (
 	"github.com/hydra-software/vault/engine/gen/vaultpb"
 	"github.com/hydra-software/vault/engine/internal/audit"
 	"github.com/hydra-software/vault/engine/internal/keys"
+	"github.com/hydra-software/vault/engine/internal/metrics"
 	"github.com/hydra-software/vault/engine/internal/node"
 	"github.com/hydra-software/vault/engine/internal/policy"
 )
@@ -157,17 +158,27 @@ func decodeJSON(r *http.Request, v any) error {
 	return nil
 }
 
+type healthResponse struct {
+	OK bool   `json:"ok"`
+	ID string `json:"id"`
+}
+
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "id": s.Node.ID()})
+	writeJSON(w, http.StatusOK, healthResponse{OK: true, ID: s.Node.ID()})
 }
 
 func (s *Server) status(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, s.Node.Status())
 }
 
+type metricsResponse struct {
+	Counters  map[string]uint64          `json:"counters"`
+	Latencies map[string]metrics.Summary `json:"latencies"`
+}
+
 func (s *Server) metrics(w http.ResponseWriter, _ *http.Request) {
 	counters, latencies := s.Node.Metrics.Snapshot()
-	writeJSON(w, http.StatusOK, map[string]any{"counters": counters, "latencies": latencies})
+	writeJSON(w, http.StatusOK, metricsResponse{Counters: counters, Latencies: latencies})
 }
 
 type policyJSON struct {

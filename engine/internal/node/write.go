@@ -1,3 +1,6 @@
+// Quorum object writes: preference-list targets, a one-chunk pipeline, then
+// the manifest. Chunks are recycled through a pool so a large upload never
+// sits entirely in memory.
 package node
 
 import (
@@ -81,18 +84,20 @@ type chunkData struct {
 	err  error
 }
 
-var chunkPool = sync.Pool{New: func() any { return make([]byte, 4<<20) }}
+const pooledChunkBytes = 4 << 20
+
+var chunkPool = sync.Pool{New: func() any { return make([]byte, pooledChunkBytes) }}
 
 func allocChunk(size int) []byte {
-	if size == 4<<20 {
+	if size == pooledChunkBytes {
 		return chunkPool.Get().([]byte)
 	}
 	return make([]byte, size)
 }
 
 func recycleChunk(buf []byte) {
-	if buf != nil && cap(buf) == 4<<20 {
-		chunkPool.Put(buf[:4<<20])
+	if buf != nil && cap(buf) == pooledChunkBytes {
+		chunkPool.Put(buf[:pooledChunkBytes])
 	}
 }
 
